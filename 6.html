@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Vibetetris</title> <!-- ИЗМЕНЕНО: Название игры -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@700&display=swap');
+
+        body {
+            background-color: #333;
+            color: #333;
+            font-family: 'Caveat', cursive;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            transition: background-color 0.5s ease;
+        }
+
+        #gameContainer {
+            padding: 20px;
+            background-color: #fdfdfa;
+            border-radius: 15px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+            border: 2px solid #222;
+            position: relative;
+        }
+
+        .screen {
+            width: 500px;
+            height: 640px;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #mainMenu.active, #scoreScreen.active, #gameScreen.active {
+            display: flex;
+        }
+
+        h1 {
+            font-size: 110px;
+            margin: 0;
+            text-shadow: 3px 3px 0px #ccc;
+        }
+
+        .menu-button {
+            font-family: 'Caveat', cursive;
+            font-weight: 700;
+            font-size: 42px;
+            padding: 10px 30px;
+            margin: 15px;
+            border: 2px solid #333;
+            border-radius: 10px;
+            background-color: #fff;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .menu-button:hover {
+            background-color: #ddd;
+            transform: translateY(-3px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+
+        #gameArea {
+            display: flex;
+            gap: 20px;
+        }
+        
+        #canvasContainer {
+            position: relative;
+        }
+
+        canvas {
+            border: 2px solid #555;
+            display: block;
+        }
+        
+        #tetrisCanvas {
+            background-color: #fffaf0;
+            /* SVG-паттерн для фона тетрадного листа */
+            background-image: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23d3d3d3' fill-opacity='0.4' fill-rule='evenodd'%3E%3Ccircle cx='3' cy='3' r='3'/%3E%3Ccircle cx='13' cy='13' r='3'/%3E%3C/g%3E%3C/svg%3E");
+        }
+        
+        #sidePanel {
+            width: 160px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .info-box {
+            width: 100%;
+            border: 2px solid #555;
+            padding: 10px;
+            text-align: center;
+            margin-bottom: 20px;
+            background-color: #fffaf0;
+        }
+
+        .info-box h2 {
+            margin: 0 0 10px 0;
+            font-size: 32px;
+        }
+
+        #score, #lines, #level {
+            font-size: 36px;
+        }
+
+        #nextCanvas {
+             border: 2px solid #555;
+             background-color: #fffaf0;
+        }
+
+        #scoreScreen ol {
+            list-style-type: none;
+            padding: 0;
+            font-size: 32px;
+            width: 80%;
+            text-align: center;
+        }
+        
+        #scoreScreen li {
+            padding: 5px;
+            border-bottom: 2px dashed #ccc;
+        }
+        
+        #scoreScreen li:last-child {
+            border-bottom: none;
+        }
+
+    </style>
+</head>
+<body>
+
+<div id="gameContainer">
+    <!-- Главное меню -->
+    <div id="mainMenu" class="screen active">
+        <h1>Vibetetris</h1> <!-- ИЗМЕНЕНО: Название игры -->
+        <button id="playBtn" class="menu-button">Играть</button>
+        <button id="scoresBtn" class="menu-button">Очки</button>
+    </div>
+
+    <!-- Экран с очками -->
+    <div id="scoreScreen" class="screen">
+        <h1>Рекорды</h1>
+        <ol id="highScoresList"></ol>
+        <button id="backToMenuBtn" class="menu-button">Назад</button>
+    </div>
+
+    <!-- Игровой экран -->
+    <div id="gameScreen" class="screen">
+        <div id="gameArea">
+            <div id="canvasContainer">
+                <canvas id="tetrisCanvas" width="300" height="600"></canvas>
+            </div>
+            <div id="sidePanel">
+                <div class="info-box">
+                    <h2>ОЧКИ</h2>
+                    <div id="score">0</div>
+                </div>
+                <div class="info-box">
+                    <h2>ЛИНИИ</h2>
+                    <div id="lines">0</div>
+                </div>
+                 <div class="info-box">
+                    <h2>УРОВЕНЬ</h2>
+                    <div id="level">1</div>
+                </div>
+                <div class="info-box">
+                    <h2>ДАЛЬШЕ</h2>
+                    <canvas id="nextCanvas" width="120" height="120"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// --- Управление экранами ---
+const mainMenu = document.getElementById('mainMenu');
+const scoreScreen = document.getElementById('scoreScreen');
+const gameScreen = document.getElementById('gameScreen');
+const playBtn = document.getElementById('playBtn');
+const scoresBtn = document.getElementById('scoresBtn');
+const backToMenuBtn = document.getElementById('backToMenuBtn');
+
+function showScreen(screen) {
+    mainMenu.classList.remove('active');
+    scoreScreen.classList.remove('active');
+    gameScreen.classList.remove('active');
+    screen.classList.add('active');
+}
+
+playBtn.addEventListener('click', () => {
+    // Важно: Resuming AudioContext on first user interaction
+    if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+    showScreen(gameScreen);
+    startGame();
+});
+scoresBtn.addEventListener('click', () => {
+    displayHighScores();
+    showScreen(scoreScreen);
+});
+backToMenuBtn.addEventListener('click', () => showScreen(mainMenu));
+
+// --- Настройка аудио ---
+let audioCtx;
+const BASE_VOLUME = 0.15; // Увеличенная громкость на 50% (было 0.1)
+let activeSounds = []; // Массив для хранения активных аудио-нодов
+
+function playSound(type) {
+    if (!audioCtx) {
+        try {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (e) { console.error("Web Audio API is not supported."); return; }
+    }
+    
+    // Resume audio context if suspended (e.g. after tab switch)
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+
+    const oscillator = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    gainNode.gain.setValueAtTime(BASE_VOLUME, audioCtx.currentTime); // Используем BASE_VOLUME
+
+    let duration = 0.3; // Default duration
+    if (type === 'clear') { 
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(523.25, audioCtx.currentTime); 
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.5);
+        oscillator.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.1); 
+        oscillator.frequency.setValueAtTime(783.99, audioCtx.currentTime + 0.2); 
+        duration = 0.3;
+    } else if (type === 'lock') { 
+        oscillator.type = 'triangle';
+        oscillator.frequency.setValueAtTime(100, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.1);
+        duration = 0.1;
+    } else if (type === 'gameover') {
+         oscillator.type = 'sawtooth';
+        oscillator.frequency.setValueAtTime(200, audioCtx.currentTime);
+        oscillator.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 1);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 1);
+        duration = 1.0;
+    }
+
+    oscillator.start(audioCtx.currentTime);
+    oscillator.stop(audioCtx.currentTime + duration);
+
+    // Добавляем ноды в список активных звуков, чтобы их не убрал сборщик мусора
+    activeSounds.push({ oscillator, gainNode });
+
+    // Удаляем ноды из активных звуков после их завершения
+    oscillator.onended = () => {
+        gainNode.disconnect();
+        oscillator.disconnect();
+        activeSounds = activeSounds.filter(s => s.oscillator !== oscillator);
+    };
+}
+
+// --- Настройки холста и игры ---
+const canvas = document.getElementById('tetrisCanvas');
+const ctx = canvas.getContext('2d');
+const nextCanvas = document.getElementById('nextCanvas');
+const nextCtx = nextCanvas.getContext('2d');
+
+const COLS = 10;
+const ROWS = 20;
+const BLOCK_SIZE = 30;
+
+let board = [];
+let score = 0;
+let lines = 0;
+let level = 1;
+
+let dropCounter = 0; // Накопитель времени для падения
+let dropInterval = 1000; // Текущий интервал падения (изменяется уровнем и soft drop)
+let levelBaseDropInterval = 1000; // Базовый интервал падения для текущего уровня (меняется только при повышении уровня)
+const INITIAL_GAME_DROP_INTERVAL = 1000; // Изначальный интервал падения для уровня 1
+
+let lastTime = 0; // Время последнего кадра
+let animationFrameId; // ID для cancelAnimationFrame
+
+let isPaused = false; // Пользовательская пауза (пробел)
+let isAnimatingGameLogic = false; // Внутренняя пауза для анимаций (например, очистка линий)
+let gameRunning = false; // Флаг, указывающий, активна ли игра
+
+let currentPiece; // Текущая падающая фигура
+let nextPiece; // Следующая фигура
+let nextLevelScore = 1000; // Очки для перехода на следующий уровень
+let scorePopups = []; // Всплывающие сообщения об очках
+
+let coffeeWobble = 0; // Для анимации кружки кофе
+
+// --- Фигуры и пастельные цвета ---
+const COLORS = ['#A1E2E6', '#E6A1A1', '#E6CFA1', '#A1E6C1', '#A1A8E6', '#CFA1E6', '#E6A1C9'];
+const SHAPES = [
+    [[1, 1, 1, 1]], // I
+    [[1, 1], [1, 1]],   // O
+    [[0, 1, 0], [1, 1, 1]], // T
+    [[0, 0, 1], [1, 1, 1]], // L
+    [[1, 0, 0], [1, 1, 1]], // J
+    [[0, 1, 1], [1, 1, 0]], // S
+    [[1, 1, 0], [0, 1, 1]]  // Z
+];
+
+const LEVEL_COLORS = ['#333', '#4a3a59', '#3a5940', '#593a3a', '#3a4f59']; // Цвета фона для уровней
+
+// --- Функция отрисовки в стиле Doodle ---
+function drawDoodleBlock(context, x, y, color) {
+    const s = BLOCK_SIZE;
+    context.fillStyle = color;
+    context.strokeStyle = 'rgba(0,0,0,0.7)';
+    context.lineWidth = 1.5;
+    context.beginPath();
+    context.moveTo(x + s*0.1, y + s*0.1);
+    context.lineTo(x + s*0.9, y + s*0.15);
+    context.lineTo(x + s*0.85, y + s*0.9);
+    context.lineTo(x + s*0.15, y + s*0.85);
+    context.closePath();
+    context.fill();
+    context.stroke();
+}
+
+// --- Функция отрисовки покачивающейся кружки кофе ---
+function drawCoffeeCup(context, cx, cy) {
+    const scale = 0.8; 
+    const mugTopWidth = 90 * scale; 
+    const mugBottomWidth = 70 * scale; 
+    const mugHeight = 80 * scale; 
+    const rimHeight = 8 * scale; 
+    const handleOuterRadius = 25 * scale;
+    const handleInnerRadius = 15 * scale;
+    const handleOffsetX = 10 * scale; 
+    const handleOffsetY = 10 * scale; 
+
+    const steamCount = 3;
+    const steamLineHeight = 35 * scale; 
+    const steamWaveAmplitude = 7 * scale; 
+    const steamSpacing = 15 * scale; 
+    const steamBaseOffset = 25 * scale; 
+
+    context.save(); 
+
+    coffeeWobble += 0.05; 
+    const angle = Math.sin(coffeeWobble) * 0.05; 
+    context.translate(cx, cy); 
+    context.rotate(angle);
+    context.translate(-cx, -cy); 
+
+    context.strokeStyle = 'rgba(0,0,0,0.7)';
+    context.lineWidth = 2;
+    context.fillStyle = '#C89F7D'; 
+
+    context.beginPath();
+    context.moveTo(cx - mugBottomWidth / 2, cy + mugHeight / 2); 
+    context.lineTo(cx + mugBottomWidth / 2, cy + mugHeight / 2); 
+    context.lineTo(cx + mugTopWidth / 2, cy - mugHeight / 2 + rimHeight / 2); 
+    context.lineTo(cx - mugTopWidth / 2, cy - mugHeight / 2 + rimHeight / 2); 
+    context.closePath();
+    context.fill();
+    context.stroke();
+
+    context.beginPath();
+    context.ellipse(cx, cy - mugHeight / 2 + rimHeight / 2, mugTopWidth / 2 + rimHeight / 2, rimHeight / 2, 0, 0, Math.PI * 2);
+    context.fill();
+    context.stroke();
+
+    context.beginPath();
+    context.ellipse(cx, cy - mugHeight / 2 + rimHeight / 2, mugTopWidth / 2 - 2 * scale, rimHeight / 2 - 2 * scale, 0, 0, Math.PI * 2);
+    context.fillStyle = '#6F4E37'; 
+    context.fill();
+
+    context.beginPath();
+    context.arc(cx + mugTopWidth / 2 + handleOffsetX, cy - mugHeight / 4 + handleOffsetY, handleOuterRadius, -Math.PI * 0.7, Math.PI * 0.7);
+    context.arc(cx + mugTopWidth / 2 + handleOffsetX, cy - mugHeight / 4 + handleOffsetY, handleInnerRadius, Math.PI * 0.7, -Math.PI * 0.7, true);
+    context.closePath();
+    context.fill();
+    context.stroke();
+    
+    context.strokeStyle = 'rgba(255,255,255,0.7)'; 
+    context.lineWidth = 3;
+    const steamStartX = cx - steamSpacing; 
+    const steamStartY = cy - mugHeight / 2 - rimHeight - steamBaseOffset; 
+
+    for (let i = 0; i < steamCount; i++) {
+        const lineStartX = steamStartX + i * steamSpacing;
+        context.beginPath();
+        context.moveTo(lineStartX, steamStartY);
+
+        for (let j = 0; j <= 10; j++) {
+            const segmentY = steamStartY - (j / 10) * steamLineHeight;
+            const segmentXOffset = Math.sin(coffeeWobble * 3 + j * 0.5 + i * 1.5) * steamWaveAmplitude * (1 - j / 10); 
+            context.lineTo(lineStartX + segmentXOffset, segmentY);
+        }
+        context.stroke();
+    }
+
+    context.restore(); 
+}
+
+// --- Игровые функции ---
+function createBoard() { return Array.from({ length: ROWS }, () => Array(COLS).fill(0)); }
+function getRandomPiece() {
+    const rand = Math.floor(Math.random() * SHAPES.length);
+    return {
+        shape: SHAPES[rand], color: COLORS[rand],
+        x: Math.floor(COLS / 2) - Math.floor(SHAPES[rand][0].length / 2), y: 0
+    };
+}
+function isValidMove(piece, offsetX, offsetY) {
+    for (let y = 0; y < piece.shape.length; y++) {
+        for (let x = 0; x < piece.shape[y].length; x++) {
+            if (piece.shape[y][x]) {
+                const newX = piece.x + x + offsetX;
+                const newY = piece.y + y + offsetY;
+                if (newX < 0 || newX >= COLS || newY >= ROWS || (newY >= 0 && board[newY] && board[newY][newX])) {
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+function rotate(piece) {
+    const newShape = piece.shape[0].map((_, i) => piece.shape.map(row => row[i]).reverse());
+    const originalX = piece.x; let offset = 1;
+    const tempPiece = { ...piece, shape: newShape };
+    while (!isValidMove(tempPiece, 0, 0)) {
+        tempPiece.x += offset;
+        offset = -(offset + (offset > 0 ? 1 : -1));
+        if (Math.abs(offset) > newShape[0].length) { tempPiece.x = originalX; return; }
+    }
+    piece.shape = newShape; piece.x = tempPiece.x;
+}
+function lockPiece() {
+    currentPiece.shape.forEach((row, y) => {
+        row.forEach((value, x) => {
+            if (value && (currentPiece.y + y >= 0)) { 
+                board[currentPiece.y + y][currentPiece.x + x] = currentPiece.color;
+            }
+        });
+    });
+    playSound('lock');
+}
+let linesToClear = [];
+function checkLines() {
+    linesToClear = [];
+    for (let y = ROWS - 1; y >= 0; y--) {
+        if (board[y].every(cell => cell !== 0)) {
+            linesToClear.push(y);
+        }
+    }
+    if (linesToClear.length > 0) {
+        playSound('clear');
+        const linesCleared = linesToClear.length;
+        lines += linesCleared;
+        const scorePoints = [0, 100, 200, 400, 800][linesCleared];
+        score += scorePoints;
+
+        scorePopups.push({ text: `+${scorePoints}`, x: canvas.width / 2, y: canvas.height / 2, life: 60, opacity: 1, size: 40 });
+        
+        if(score >= nextLevelScore) {
+            level++;
+            nextLevelScore += 1000;
+            updateDropInterval(); // Обновить скорость при переходе на новый уровень
+            document.body.style.backgroundColor = LEVEL_COLORS[(level - 1) % LEVEL_COLORS.length];
+            scorePopups.push({ text: `Уровень ${level}!`, x: canvas.width / 2, y: canvas.height / 2 + 60, life: 90, opacity: 1, size: 50 });
+        }
+        return true;
+    }
+    return false;
+}
+
+function removeLines() {
+    const linesClearedCount = linesToClear.length;
+    board = board.filter((row, index) => !linesToClear.includes(index));
+    for (let i = 0; i < linesClearedCount; i++) {
+        board.unshift(Array(COLS).fill(0));
+    }
+    linesToClear = [];
+}
+
+// --- Отрисовка ---
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    board.forEach((row, y) => {
+        row.forEach((color, x) => {
+            if (color) drawDoodleBlock(ctx, x * BLOCK_SIZE, y * BLOCK_SIZE, color);
+        });
+    });
+    
+    if (currentPiece) {
+        currentPiece.shape.forEach((row, y) => {
+            row.forEach((value, x) => {
+                if (value) drawDoodleBlock(ctx, (currentPiece.x + x) * BLOCK_SIZE, (currentPiece.y + y) * BLOCK_SIZE, currentPiece.color);
+            });
+        });
+    }
+
+    nextCtx.clearRect(0, 0, nextCanvas.width, nextCanvas.height);
+    if(nextPiece) {
+        const xOffset = (nextCanvas.width - nextPiece.shape[0].length * BLOCK_SIZE) / 2;
+        const yOffset = (nextCanvas.height - nextPiece.shape.length * BLOCK_SIZE) / 2;
+         nextPiece.shape.forEach((row, y) => {
+            row.forEach((value, x) => {
+                if (value) drawDoodleBlock(nextCtx, x * BLOCK_SIZE + xOffset, y * BLOCK_SIZE + yOffset, nextPiece.color);
+            });
+        });
+    }
+    
+    scorePopups.forEach((popup, index) => {
+        ctx.font = `bold ${popup.size}px 'Caveat'`;
+        ctx.fillStyle = `rgba(0, 0, 0, ${popup.opacity})`;
+        ctx.textAlign = 'center';
+        ctx.fillText(popup.text, popup.x, popup.y);
+        popup.y -= 1;
+        popup.life--;
+        popup.opacity = popup.life / 60;
+        if (popup.life <= 0) scorePopups.splice(index, 1);
+    });
+
+    if (isPaused) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'; 
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.font = 'bold 80px "Caveat"';
+        ctx.fillStyle = 'white';
+        ctx.textAlign = 'center';
+        ctx.fillText('ПАУЗА', canvas.width / 2, canvas.height / 2 - 50);
+
+        drawCoffeeCup(ctx, canvas.width / 2, canvas.height / 2 + 120); 
+    }
+
+    document.getElementById('score').innerText = score;
+    document.getElementById('lines').innerText = lines;
+    document.getElementById('level').innerText = level;
+}
+
+// --- Анимация очистки линии ---
+function animateLineClear(callback) {
+    let flashes = 6;
+    isAnimatingGameLogic = true; 
+    let interval = setInterval(() => {
+        draw(); 
+        linesToClear.forEach(y => {
+            for (let x = 0; x < COLS; x++) {
+                const color = (flashes % 2 === 0) ? '#FFFF99' : board[y][x]; 
+                drawDoodleBlock(ctx, x*BLOCK_SIZE, y*BLOCK_SIZE, color);
+            }
+        });
+        flashes--;
+        if (flashes < 0) {
+            clearInterval(interval);
+            isAnimatingGameLogic = false; 
+            callback();
+        }
+    }, 60);
+}
+
+// --- Главный цикл игры ---
+function update(time = 0) {
+    if (!gameRunning) { 
+        animationFrameId = requestAnimationFrame(update);
+        return;
+    }
+
+    // Всегда обновляем lastTime, чтобы deltaTime был корректным,
+    // даже если игра на паузе или в анимации, предотвращая "прыжки" dropCounter.
+    const actualDeltaTime = time - lastTime;
+    lastTime = time;
+
+    if (!isPaused && !isAnimatingGameLogic) { 
+        dropCounter += actualDeltaTime;
+
+        if (dropCounter > dropInterval) {
+            dropPiece(); // Выполняем один шаг падения
+            dropCounter = 0; // Сбрасываем dropCounter после каждого шага
+        }
+    }
+    draw(); 
+    animationFrameId = requestAnimationFrame(update);
+}
+
+// --- Выполнение одного шага падения блока ---
+function dropPiece() {
+    if (isValidMove(currentPiece, 0, 1)) {
+        currentPiece.y++;
+    } else { // Фигура заблокировалась
+        lockPiece();
+        const linesWereCleared = checkLines();
+        
+        if (linesWereCleared) {
+            animateLineClear(() => { 
+                removeLines();
+                resetPiece(); // Сброс dropCounter внутри resetPiece
+            });
+        } else {
+            resetPiece(); // Сброс dropCounter внутри resetPiece
+        }
+    }
+}
+
+// --- Спавн новой фигуры ---
+function resetPiece() {
+    currentPiece = nextPiece;
+    nextPiece = getRandomPiece();
+    dropCounter = 0; // *** ГЛАВНОЕ ИСПРАВЛЕНИЕ: Сброс dropCounter при появлении новой фигуры ***
+    if (!isValidMove(currentPiece, 0, 0)) {
+        gameOver();
+        return; 
+    }
+}
+
+// --- Функция для обновления скорости падения в зависимости от уровня ---
+function updateDropInterval() {
+    let speedIncreasePercentage = 0; // На сколько процентов ускоряется игра от INITIAL_GAME_DROP_INTERVAL
+    if (level === 2) {
+        speedIncreasePercentage = 10; // Уровень 2: 10% быстрее
+    } else if (level > 2) {
+        speedIncreasePercentage = 10 + (level - 2) * 5; // Уровень 3: 15%, Уровень 4: 20% и т.д.
+    }
+    speedIncreasePercentage = Math.min(speedIncreasePercentage, 90); // Ограничение максимального ускорения
+
+    levelBaseDropInterval = INITIAL_GAME_DROP_INTERVAL * (1 - speedIncreasePercentage / 100);
+
+    // Применяем "мягкое падение", если кнопка "вниз" зажата
+    if (downKeyPressed) {
+        dropInterval = levelBaseDropInterval / 10;
+    } else {
+        dropInterval = levelBaseDropInterval;
+    }
+}
+
+// --- Конец игры ---
+function gameOver() {
+    playSound('gameover');
+    cancelAnimationFrame(animationFrameId);
+    gameRunning = false; 
+    isAnimatingGameLogic = false; 
+    isPaused = false;
+    
+    setTimeout(() => { 
+        alert(`Игра окончена! Ваши очки: ${score}`);
+        saveHighScore(score);
+        showScreen(mainMenu);
+    }, 500);
+}
+
+// --- Управление ---
+let downKeyPressed = false;
+document.addEventListener('keydown', event => {
+    // Предотвратить скроллинг страницы для всех управляющих клавиш
+    if ([' ', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
+        event.preventDefault();
+    }
+
+    if (!gameScreen.classList.contains('active')) return; 
+
+    if (event.key === ' ') { // Пробел для паузы/продолжения
+        isPaused = !isPaused;
+        if (!isPaused) { // Если выходим из паузы
+            lastTime = performance.now(); // Сбросить время, чтобы избежать скачка после паузы
+            updateDropInterval(); // Обновить dropInterval на случай изменения уровня во время паузы
+        }
+        return; 
+    }
+
+    if (isPaused || isAnimatingGameLogic) return; // Игнорировать ввод, если игра на паузе или в анимации
+
+    if (!currentPiece) return; 
+
+    if (event.key === 'ArrowLeft') {
+        if (isValidMove(currentPiece, -1, 0)) currentPiece.x--;
+    } else if (event.key === 'ArrowRight') {
+        if (isValidMove(currentPiece, 1, 0)) currentPiece.x++;
+    } else if (event.key === 'ArrowUp') {
+        rotate(currentPiece);
+    }
+    
+    if (event.key === 'ArrowDown' && !downKeyPressed) {
+        downKeyPressed = true;
+        updateDropInterval(); // Применить ускорение "мягкого падения"
+    }
+});
+
+document.addEventListener('keyup', event => {
+    if (!gameScreen.classList.contains('active')) return; 
+
+    if (event.key === 'ArrowDown') {
+        event.preventDefault(); 
+        downKeyPressed = false;
+        updateDropInterval(); // Вернуть нормальную скорость
+    }
+});
+
+// --- Система рекордов ---
+function saveHighScore(score) {
+    if (score === 0) return;
+    const highScores = JSON.parse(localStorage.getItem('vibetetrisHighScores')) || []; /* ИЗМЕНЕНО: Ключ localStorage */
+    highScores.push({ score: score, date: new Date().toLocaleDateString() });
+    highScores.sort((a, b) => b.score - a.score).splice(10);
+    localStorage.setItem('vibetetrisHighScores', JSON.stringify(highScores)); /* ИЗМЕНЕНО: Ключ localStorage */
+}
+
+function displayHighScores() {
+    const highScores = JSON.parse(localStorage.getItem('vibetetrisHighScores')) || []; /* ИЗМЕНЕНО: Ключ localStorage */
+    const list = document.getElementById('highScoresList');
+    list.innerHTML = highScores.length ? highScores.map(s => `<li>${s.score} - ${s.date}</li>`).join('') : '<li>Пока нет рекордов!</li>';
+}
+
+// --- Запуск игры ---
+function startGame() {
+    board = createBoard();
+    score = 0;
+    lines = 0;
+    level = 1;
+    nextLevelScore = 1000;
+    scorePopups = [];
+    isPaused = false; 
+    isAnimatingGameLogic = false; 
+    downKeyPressed = false;
+    document.body.style.backgroundColor = LEVEL_COLORS[0];
+    
+    // Инициализация скорости для первого уровня
+    updateDropInterval(); 
+    
+    nextPiece = getRandomPiece();
+    resetPiece();
+    
+    if (!isValidMove(currentPiece, 0, 0)) {
+        gameOver();
+        return; 
+    }
+
+    gameRunning = true; 
+    
+    if (animationFrameId) cancelAnimationFrame(animationFrameId);
+    lastTime = performance.now(); 
+    update();
+}
+</script>
+</body>
+</html>
